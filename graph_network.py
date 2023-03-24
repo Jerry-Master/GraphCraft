@@ -4,12 +4,14 @@ import multiprocessing as mp
 import argparse
 import time
 
-class server():
+class Server(Process):
 
     def __init__(self, ip_addr: str, port: int):
+        super().__init__()
         self.ip_addr = ip_addr
         self.port = port
 
+    def run(self):
         self.init_socket()
         self.start_listening()
         self.init_game()
@@ -32,12 +34,14 @@ class server():
         self.socket.close()
 
 
-class client():
+class Client(Process):
 
     def __init__(self, server_addr: str, server_port: int):
+        super().__init__()
         self.server_addr = server_addr
         self.server_port = server_port
 
+    def run(self):
         self.init_socket()
         self.connect_to_server()
         self.start_game()
@@ -71,20 +75,18 @@ def _create_parser():
     return parser
 
 if __name__=='__main__':
-    mp.set_start_method('fork')
-
     parser = _create_parser()
     args = parser.parse_args()
 
-    server = Process(target=server, args=(args.server_ip, args.server_port))
+    server = Server(args.server_ip, args.server_port)
     server.start()
     
     inp = input('Start connection? [y/n]: ')
     if inp.lower() == 'y':
-        client = Process(target=client, args=(args.client_ip, args.client_port))
+        client = Client(args.client_ip, args.client_port)
         client.start()
     
         server.join()
         client.join()
     else:
-        server.join()
+        server.terminate()
