@@ -1,6 +1,5 @@
 import socket
 from multiprocessing import Process
-import multiprocessing as mp
 import argparse
 import time
 
@@ -10,6 +9,7 @@ class Server(Process):
         super().__init__()
         self.ip_addr = ip_addr
         self.port = port
+        self.turn = 0
 
     def run(self):
         self.init_socket()
@@ -24,11 +24,26 @@ class Server(Process):
         self.socket.bind((self.ip_addr, self.port))
         self.socket.listen()
 
+        self.socket1, addr1 = self.socket.accept()
+        msg = 'Connection made.'
+        self.socket1.send(msg.encode())
+
+        self.socket2, addr2 = self.socket.accept()
+        self.socket2.send(msg.encode())
+
     def init_game(self):
-        partner_socket, partner_addr = self.socket.accept()
-        print('Game started.')
-        msg = partner_socket.recv(1024).decode()
-        print(f'Received message {msg}')
+        while True:
+            if self.turn % 2 == 0:
+                action = self.socket1.recv(1024).decode()
+                # ...
+                msg = f'Turn {self.turn}'
+                self.socket2.send(msg.encode())
+            else:
+                action = self.socket2.recv(1024).decode()
+                # ...
+                msg = f'Turn {self.turn}'
+                self.socket1.send(msg.encode())
+            self.turn += 1
     
     def cleanup(self):
         self.socket.close()
@@ -36,10 +51,11 @@ class Server(Process):
 
 class Client(Process):
 
-    def __init__(self, server_addr: str, server_port: int):
+    def __init__(self, server_addr: str, server_port: int, is_first: bool):
         super().__init__()
         self.server_addr = server_addr
         self.server_port = server_port
+        self.is_first = is_first
 
     def run(self):
         self.init_socket()
@@ -52,41 +68,38 @@ class Client(Process):
 
     def connect_to_server(self):
         self.socket.connect((self.server_addr, self.server_port))
-        # while True:
-        #     try:
-        #         self.socket.connect((self.server_addr, self.server_port))
-        #     except Exception as e:
-        #         print(e)
-        #         time.sleep(1)
+        msg = self.socket.recv(1024).decode()
+        print(msg)
 
     def start_game(self):
-        msg = 'Hello, server!'
-        self.socket.send(msg.encode())
+        time.sleep(4)
+        while True:
+            if self.is_first:
+                msg = 'Action'
+                self.socket.send(msg.encode())
+            else:
+                msg = self.socket.recv(1024).decode()
+                print(msg)
+            self.is_first = not self.is_first
     
     def cleanup(self):
         self.socket.close()
 
 def _create_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--client-ip', type=str)
     parser.add_argument('--server-ip', type=str)
-    parser.add_argument('--client-port', type=int)
     parser.add_argument('--server-port', type=int)
+    parser.add_argument('--first-player', action='store_true')
     return parser
 
 if __name__=='__main__':
     parser = _create_parser()
     args = parser.parse_args()
 
-    server = Server(args.server_ip, args.server_port)
-    server.start()
+    if args.first_player:
+        server = Server(args.server_ip, args.server_port)
+        server.start()
+        time.sleep(1)
     
-    inp = input('Start connection? [y/n]: ')
-    if inp.lower() == 'y':
-        client = Client(args.client_ip, args.client_port)
-        client.start()
-    
-        server.join()
-        client.join()
-    else:
-        server.terminate()
+    client = Client(args.server_ip, args.server_port, args.first_player)
+    client.start()
